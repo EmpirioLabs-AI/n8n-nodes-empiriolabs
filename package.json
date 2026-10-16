@@ -1,0 +1,67 @@
+{
+	"name": "n8n-nodes-empiriolabs",
+	"version": "0.1.0",
+	"description": "n8n nodes for EmpirioLabs AI: chat, image generation, text to speech, transcription, video generation, embeddings, and async jobs.",
+	"license": "MIT",
+	"homepage": "https://github.com/EmpirioLabs-AI/n8n-nodes-empiriolabs#readme",
+	"keywords": [
+		"n8n-community-node-package",
+		"n8n",
+		"empiriolabs",
+		"ai",
+		"llm",
+		"image-generation",
+		"video-generation",
+		"text-to-speech",
+		"transcription",
+		"embeddings"
+	],
+	"author": {
+		"name": "EmpirioLabs AI",
+		"email": "support@empiriolabs.ai",
+		"url": "https://empiriolabs.ai"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/EmpirioLabs-AI/n8n-nodes-empiriolabs.git"
+	},
+	"bugs": {
+		"url": "https://github.com/EmpirioLabs-AI/n8n-nodes-empiriolabs/issues"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"test": "npm run build && node --test test/unit/*.test.mjs",
+		"test:live": "npm run build && node --test test/live/*.test.mjs",
+		"scan:local": "npm run build && node scripts/scan-local.mjs",
+		"release": "n8n-node release",
+		"prepublishOnly": "n8n-node prerelease"
+	},
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/EmpirioLabsApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/Empiriolabs/Empiriolabs.node.js",
+			"dist/nodes/EmpiriolabsTrigger/EmpiriolabsTrigger.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "^0.52.5",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^21.1.0",
+		"typescript": "5.9.2"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
+}

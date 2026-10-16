@@ -1,0 +1,7 @@
+dist
+node_modules
+.scan
+.n8n-runtime
+*.tgz
+.env
+.env.*

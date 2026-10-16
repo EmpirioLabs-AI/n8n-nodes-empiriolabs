@@ -1,0 +1,92 @@
+# Publishes n8n-nodes-empiriolabs to npm when a version tag such as 0.1.0 is pushed.
+#
+# n8n requires community nodes submitted for verification to be published from
+# GitHub Actions with an npm provenance statement (from May 1 2026). The job asks
+# GitHub for an OIDC token (id-token: write), and `npm run release` publishes
+# with NPM_CONFIG_PROVENANCE=true, so every version carries provenance that ties
+# it to this repository, this workflow, and the tagged commit.
+#
+# npm authentication, in order of preference:
+#
+#   1. Trusted publishing (OIDC, no secret). On npmjs.com open the package, then
+#      Settings > Trusted publishing, and add a GitHub Actions publisher:
+#        Organization or user: EmpirioLabs-AI
+#        Repository:           n8n-nodes-empiriolabs
+#        Workflow filename:    publish.yml
+#        Environment:          (leave empty)
+#      Trusted publishing needs npm 11.5.1 or later, which Node 24 includes.
+#
+#   2. An NPM_TOKEN repository secret: a granular npm access token that can
+#      publish this package. npm only lets you add a trusted publisher to a
+#      package that already exists, so use the token for the first version, then
+#      add the trusted publisher, delete the secret, and revoke the token.
+#
+# The tag must equal the version in package.json. `npm run release` on a local
+# machine bumps the version, updates the changelog, and pushes the tag.
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Lets npm request an OIDC token for trusted publishing and the provenance signature.
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Check the tag and the npm version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+          npm_version="$(npm --version)"
+          if ! node -e "const [a,b,c]=process.argv[1].split('.').map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$npm_version"; then
+            echo "::error::npm $npm_version is too old for trusted publishing; 11.5.1 or later is required"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Publish with provenance
+        # `npm run release` runs `n8n-node release`. Inside GitHub Actions it runs lint and
+        # build, then `npm publish` with NPM_CONFIG_PROVENANCE=true.
+        # Without an NPM_TOKEN secret, npm authenticates through trusted publishing.
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          fi
+          npm run release
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
