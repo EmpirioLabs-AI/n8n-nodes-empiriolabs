@@ -2,7 +2,7 @@
 
 This is an n8n community node package. It lets you use [EmpirioLabs AI](https://empiriolabs.ai) in your n8n workflows for chat, image generation, text to speech, transcription, video generation, and embeddings, and it can start a workflow when a generation job finishes.
 
-EmpirioLabs AI is a specialized AI inference and integration provider. It self-hosts open models on GPU infrastructure it manages, runs optimized endpoints for proprietary models, builds custom and dedicated deployments, and offers on-demand GPU Cloud instances and hosted AI agents. Its model catalog covers text, image, audio, video, transcription, embedding, reranking, research, and 3D models.
+EmpirioLabs AI is a specialized AI inference and integration provider. It hosts open-source models on its own GPUs, runs optimized endpoints for proprietary models, helps teams ship their own models to large audiences, and offers on-demand GPU Cloud instances and hosted AI agents. Its model catalog covers text, image, audio, video, transcription, embedding, reranking, research, and 3D models.
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
 
