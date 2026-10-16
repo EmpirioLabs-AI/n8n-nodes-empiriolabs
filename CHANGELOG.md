@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Published from GitHub Actions through npm trusted publishing (OIDC), with provenance.
+- README: link to the npm package.
+
 ## 0.1.0
 
 - First release.

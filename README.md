@@ -104,9 +104,14 @@ Versions are published to npm with a provenance statement by the [Publish workfl
 - [EmpirioLabs AI documentation](https://docs.empiriolabs.ai/getting-started)
 - [EmpirioLabs AI API reference](https://docs.empiriolabs.ai/api-reference-overview)
 - [EmpirioLabs AI models](https://empiriolabs.ai/models)
+- [npm package](https://www.npmjs.com/package/n8n-nodes-empiriolabs)
 - Support: [support@empiriolabs.ai](mailto:support@empiriolabs.ai)
 
 ## Version history
+
+### 0.1.1
+
+Published from GitHub Actions through npm trusted publishing, with provenance. The README links the npm package.
 
 ### 0.1.0
 
