@@ -6,7 +6,7 @@
 	"resources": {
 		"credentialDocumentation": [
 			{
-				"url": "https://github.com/EmpirioLabs-AI/n8n-nodes-empiriolabs?tab=readme-ov-file#credentials"
+				"url": "https://docs.empiriolabs.ai/authentication"
 			}
 		],
 		"primaryDocumentation": [

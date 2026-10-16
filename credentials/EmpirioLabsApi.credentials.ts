@@ -14,7 +14,7 @@ export class EmpirioLabsApi implements ICredentialType {
 	icon: Icon = { light: 'file:../icons/empiriolabs.png', dark: 'file:../icons/empiriolabs.png' };
 
 	documentationUrl =
-		'https://github.com/EmpirioLabs-AI/n8n-nodes-empiriolabs?tab=readme-ov-file#credentials';
+		'https://docs.empiriolabs.ai/authentication';
 
 	properties: INodeProperties[] = [
 		{
