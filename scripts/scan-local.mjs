@@ -8,14 +8,14 @@
 //   1. the source files (package.json, nodes/, credentials/), and
 //   2. the files `npm pack` would publish (compiled .js and package.json).
 //
-// Usage: npm run scan:local   (builds first; installs the scanner into .scan/tool)
+// Usage: npm run scan:local (builds first; installs the locked scanner into .scan/tool).
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-
-const SCANNER = '@n8n/scan-community-package';
-const SCANNER_VERSION = '0.40.0';
+import { SCANNER, SCANNER_MANIFEST } from './scanner-config.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workDir = path.join(root, '.scan');
@@ -46,27 +46,42 @@ function installedVersion(name) {
 }
 
 function ensureScanner() {
-	// The scanner's lint plugin loads n8n-workflow, a peer it declares as `>=2`, so npm would
-	// install whatever the registry's `latest` tag names. Install the version this project's
-	// lockfile resolves instead: the scan then loads what `npm run lint` loads, and it moves
-	// with every lockfile update.
-	const wanted = [
-		[SCANNER, SCANNER_VERSION],
-		['n8n-workflow', lockedVersion('n8n-workflow')],
-	];
-	if (wanted.every(([name, version]) => installedVersion(name) === version)) {
+	const projectManifest = path.join(root, 'node_modules', 'n8n-workflow', 'package.json');
+	if (
+		!existsSync(projectManifest) ||
+		JSON.parse(readFileSync(projectManifest, 'utf8')).version !== lockedVersion('n8n-workflow')
+	) {
+		throw new Error('n8n-workflow does not match package-lock.json; run npm ci --ignore-scripts');
+	}
+	const lockBytes = readFileSync(path.join(root, 'scripts', 'scanner-package-lock.json'));
+	const lock = JSON.parse(lockBytes.toString('utf8'));
+	if (Object.keys(lock.packages ?? {}).some((name) => name.endsWith('/n8n-workflow'))) {
+		throw new Error('The scanner lock must inherit the project n8n-workflow peer');
+	}
+	const version = lock.packages?.[`node_modules/${SCANNER}`]?.version;
+	if (!version || !lock.packages?.['']?.dependencies?.[SCANNER]) {
+		throw new Error('The scanner lock does not resolve the scanner');
+	}
+	const stamp = path.join(toolDir, '.lock-sha256');
+	const digest = createHash('sha256')
+		.update(JSON.stringify(SCANNER_MANIFEST))
+		.update(lockBytes)
+		.digest('hex');
+	if (
+		existsSync(stamp) &&
+		readFileSync(stamp, 'utf8') === digest &&
+		installedVersion(SCANNER) === version
+	) {
 		return;
 	}
-	rmSync(toolDir, { recursive: true, force: true });
 	mkdirSync(toolDir, { recursive: true });
-	writeFileSync(
-		path.join(toolDir, 'package.json'),
-		JSON.stringify({ name: 'local-scan-tool', private: true }, null, 2),
-	);
-	const specs = wanted.map(([name, version]) => `${name}@${version}`);
-	console.log(`Installing ${specs.join(' ')} into .scan/tool ...`);
-	// The scanner runs without any install script, so none are run.
-	npm(['install', '--no-audit', '--no-fund', '--ignore-scripts', ...specs], toolDir);
+	writeFileSync(path.join(toolDir, 'package.json'), JSON.stringify(SCANNER_MANIFEST, null, 2));
+	writeFileSync(path.join(toolDir, 'package-lock.json'), lockBytes);
+	console.log(`Installing locked ${SCANNER}@${version} into .scan/tool ...`);
+	// Omitting automatic peer installs lets the scanner resolve the project's own
+	// n8n-workflow, rather than maintaining another copy or consulting a dist-tag.
+	npm(['ci', '--no-audit', '--no-fund', '--ignore-scripts', '--legacy-peer-deps'], toolDir);
+	writeFileSync(stamp, digest);
 }
 
 function stagePublishedFiles() {
@@ -94,6 +109,11 @@ function report(label, result) {
 }
 
 ensureScanner();
+const projectRequire = createRequire(import.meta.url);
+const scannerRequire = createRequire(path.join(toolDir, 'package.json'));
+if (scannerRequire.resolve('n8n-workflow') !== projectRequire.resolve('n8n-workflow')) {
+	throw new Error('The scanner must resolve the same n8n-workflow installation as this project');
+}
 const pack = stagePublishedFiles();
 console.log(`Staged ${pack.files.length} files from ${pack.filename} (${pack.size} bytes packed)`);
 
