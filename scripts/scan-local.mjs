@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SCANNER = '@n8n/scan-community-package';
-const SCANNER_VERSION = '0.39.0';
+const SCANNER_VERSION = '0.40.0';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workDir = path.join(root, '.scan');
@@ -31,21 +31,42 @@ function npm(args, cwd) {
 	return execFileSync('npm', args, { cwd, encoding: 'utf8', shell: process.platform === 'win32' });
 }
 
+function lockedVersion(name) {
+	const lock = JSON.parse(readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+	const version = lock.packages?.[`node_modules/${name}`]?.version;
+	if (!version) {
+		throw new Error(`package-lock.json does not resolve ${name}`);
+	}
+	return version;
+}
+
+function installedVersion(name) {
+	const manifest = path.join(toolDir, 'node_modules', ...name.split('/'), 'package.json');
+	return existsSync(manifest) ? JSON.parse(readFileSync(manifest, 'utf8')).version : undefined;
+}
+
 function ensureScanner() {
-	const manifest = path.join(toolDir, 'node_modules', ...SCANNER.split('/'), 'package.json');
-	if (
-		existsSync(manifest) &&
-		JSON.parse(readFileSync(manifest, 'utf8')).version === SCANNER_VERSION
-	) {
+	// The scanner's lint plugin loads n8n-workflow, a peer it declares as `>=2`, so npm would
+	// install whatever the registry's `latest` tag names. Install the version this project's
+	// lockfile resolves instead: the scan then loads what `npm run lint` loads, and it moves
+	// with every lockfile update.
+	const wanted = [
+		[SCANNER, SCANNER_VERSION],
+		['n8n-workflow', lockedVersion('n8n-workflow')],
+	];
+	if (wanted.every(([name, version]) => installedVersion(name) === version)) {
 		return;
 	}
+	rmSync(toolDir, { recursive: true, force: true });
 	mkdirSync(toolDir, { recursive: true });
 	writeFileSync(
 		path.join(toolDir, 'package.json'),
 		JSON.stringify({ name: 'local-scan-tool', private: true }, null, 2),
 	);
-	console.log(`Installing ${SCANNER}@${SCANNER_VERSION} into .scan/tool ...`);
-	npm(['install', '--no-audit', '--no-fund', `${SCANNER}@${SCANNER_VERSION}`], toolDir);
+	const specs = wanted.map(([name, version]) => `${name}@${version}`);
+	console.log(`Installing ${specs.join(' ')} into .scan/tool ...`);
+	// The scanner runs without any install script, so none are run.
+	npm(['install', '--no-audit', '--no-fund', '--ignore-scripts', ...specs], toolDir);
 }
 
 function stagePublishedFiles() {
