@@ -62,7 +62,7 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run unit tests, lint and build
         # The order of the earlier release flow: the tests build, then lint, then build.
