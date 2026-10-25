@@ -1,6 +1,6 @@
 # n8n-nodes-empiriolabs
 
-This is an n8n community node package. It lets you use [EmpirioLabs AI](https://empiriolabs.ai) in your n8n workflows for chat, image generation, text to speech, transcription, video generation, and embeddings, and it can start a workflow when a generation job finishes.
+This is an n8n community node package. It lets you use [EmpirioLabs AI](https://empiriolabs.ai) in your n8n workflows for chat, image generation, text to speech, transcription, video generation, and embeddings, and to run any EmpirioLabs AI tool, such as reading a document or searching the web. It can also start a workflow when a generation job finishes.
 
 EmpirioLabs AI is a specialized AI inference and integration provider. It self-hosts open-source models on GPU infrastructure it manages, runs optimized endpoints for proprietary models, helps teams ship their own models to large audiences, and offers on-demand GPU Cloud instances and hosted AI agents. Its model catalog covers text, image, audio, video, transcription, embedding, reranking, research, and 3D models.
 
@@ -34,11 +34,22 @@ The **EmpirioLabs AI** node supports these resources and operations. Every model
 | Job | Get | Returns the status and result of a job. Can also download the finished file as binary data. |
 | Job | Get Many | Returns recent jobs, optionally filtered by status. |
 | Model | Get Many | Returns models from the catalog, optionally filtered by category or search text. |
+| Tool | Run | Runs any EmpirioLabs AI tool, such as reading a document, searching the web, or generating media. See [Run a tool](#run-a-tool). |
 | Video | Generate | Starts a video generation job and returns the job. Turn on **Wait for Completion** to wait for the video, with a timeout, and download it as a binary file. |
 
 Operations that create content also accept **Model Parameters (JSON)**: extra request fields for the selected model, such as `{"seed": 42}`. Each model lists the fields it accepts on its page in the [model catalog](https://docs.empiriolabs.ai/models-pricing).
 
 The node can be used as a tool by the n8n AI Agent.
+
+### Run a tool
+
+**Tool > Run** (the **Run a tool** action) runs any EmpirioLabs AI tool, such as reading a document, searching the web, or generating media.
+
+- **Tool Name or ID:** the list loads live from EmpirioLabs AI, so new tools appear here without a node update.
+- **Specify Arguments:** with **Using Fields Below**, the arguments of the chosen tool load as fields: text, numbers, switches, dropdowns for fixed choices, and JSON for objects and lists. Required arguments are marked, and empty fields are not sent. A switch starts at the tool's default, and a switch without a default is not sent until you change it. With **Using JSON**, enter all arguments as one JSON object, such as `{"query": "open models"}`.
+- **Output:** one item with `tool`, `text` (the text result), `result` (the structured result), `job_id`, and `status`.
+- **Long jobs:** a tool that starts a long job, such as a video, returns its `job_id` and a `status` such as `processing`. Get the finished result with **Job > Get**, or start a workflow when the job finishes with the trigger.
+- **Errors:** when a tool cannot run, the node shows the message from EmpirioLabs AI, or returns it in the item when **Continue On Fail** is on.
 
 ## Trigger
 
@@ -62,7 +73,7 @@ n8n checks the key with a request to `GET https://api.empiriolabs.ai/v1/account/
 
 ## Compatibility
 
-Built with the n8n node CLI (`@n8n/node-cli` 0.52) and tested against `n8n-workflow` 2.43. The package has no runtime dependencies.
+Built with the n8n node CLI (`@n8n/node-cli` 0.54) and tested against `n8n-workflow` 2.45. The package has no runtime dependencies.
 
 ## Usage
 
@@ -108,6 +119,10 @@ Versions are published to npm with a provenance statement by the [Publish workfl
 - Support: [support@empiriolabs.ai](mailto:support@empiriolabs.ai)
 
 ## Version history
+
+### 0.2.0
+
+New Tool resource with the Run operation (Run a tool), which runs any EmpirioLabs AI tool. The tool list and each tool's arguments load live from EmpirioLabs AI, so new tools appear without a node update.
 
 ### 0.1.1
 
