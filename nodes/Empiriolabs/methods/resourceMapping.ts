@@ -157,6 +157,10 @@ export function toolFields(tool: IDataObject): ResourceMapperField[] {
 		if (shape.options) {
 			field.options = shape.options;
 		}
+		if (!field.required && (shape.type === 'object' || shape.type === 'array')) {
+			// An optional JSON argument starts under "Add argument": an empty JSON editor reads as an error.
+			field.removed = true;
+		}
 		if (shape.type === 'boolean') {
 			// A switch starts at the tool's own default, or unset so that nothing is sent.
 			const fallback = isDataObject(property) ? property.default : undefined;

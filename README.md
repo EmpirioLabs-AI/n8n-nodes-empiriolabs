@@ -46,7 +46,7 @@ The node can be used as a tool by the n8n AI Agent.
 **Tool > Run** (the **Run a tool** action) runs any EmpirioLabs AI tool, such as reading a document, searching the web, or generating media.
 
 - **Tool Name or ID:** the list loads live from EmpirioLabs AI, so new tools appear here without a node update.
-- **Specify Arguments:** with **Using Fields Below**, the arguments of the chosen tool load as fields: text, numbers, switches, dropdowns for fixed choices, and JSON for objects and lists. Required arguments are marked, and empty fields are not sent. A switch starts at the tool's default, and a switch without a default is not sent until you change it. With **Using JSON**, enter all arguments as one JSON object, such as `{"query": "open models"}`.
+- **Specify Arguments:** with **Using Fields Below**, the arguments of the chosen tool load as fields: text, numbers, switches, dropdowns for fixed choices, and JSON for objects and lists. Required arguments are marked, optional object and list arguments are added from **Add argument**, and empty fields are not sent. A switch starts at the tool's default, and a switch without a default is not sent until you change it. With **Using JSON**, enter all arguments as one JSON object, such as `{"query": "open models"}`.
 - **Output:** one item with `tool`, `text` (the text result), `result` (the structured result), `job_id`, and `status`.
 - **Long jobs:** a tool that starts a long job, such as a video, returns its `job_id` and a `status` such as `processing`. Get the finished result with **Job > Get**, or start a workflow when the job finishes with the trigger.
 - **Errors:** when a tool cannot run, the node shows the message from EmpirioLabs AI, or returns it in the item when **Continue On Fail** is on.

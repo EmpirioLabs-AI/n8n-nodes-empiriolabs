@@ -271,8 +271,8 @@ describe('Argument fields', () => {
 					{ name: 'html', value: 'html' },
 				],
 			},
-			{ ...base, id: 'images', displayName: 'Images', required: false, type: 'array' },
-			{ ...base, id: 'parameters', displayName: 'Parameters', required: false, type: 'object' },
+			{ ...base, id: 'images', displayName: 'Images', required: false, type: 'array', removed: true },
+			{ ...base, id: 'parameters', displayName: 'Parameters', required: false, type: 'object', removed: true },
 			{ ...base, id: 'seed', displayName: 'Seed', required: false, type: 'number' },
 			{
 				...base,
@@ -287,10 +287,10 @@ describe('Argument fields', () => {
 			},
 			{ ...base, id: 'input', displayName: 'Input', required: false, type: 'string' },
 			{ ...base, id: 'document', displayName: 'Document', required: true, type: 'object' },
-			{ ...base, id: 'pages', displayName: 'Pages', required: false, type: 'array' },
+			{ ...base, id: 'pages', displayName: 'Pages', required: false, type: 'array', removed: true },
 			{ ...base, id: 'scale', displayName: 'Scale', required: false, type: 'number' },
 			{ ...base, id: 'tool_choice', displayName: 'Tool Choice', required: false, type: 'string' },
-			{ ...base, id: 'metadata', displayName: 'Metadata', required: false, type: 'object' },
+			{ ...base, id: 'metadata', displayName: 'Metadata', required: false, type: 'object', removed: true },
 			{ ...base, id: 'anything', displayName: 'Anything', required: false, type: 'string' },
 		]);
 	});
