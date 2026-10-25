@@ -1,7 +1,7 @@
 {
 	"name": "n8n-nodes-empiriolabs",
-	"version": "0.1.1",
-	"description": "n8n nodes for EmpirioLabs AI: chat, image generation, text to speech, transcription, video generation, embeddings, and async jobs.",
+	"version": "0.2.0",
+	"description": "n8n nodes for EmpirioLabs AI: chat, image generation, text to speech, transcription, video generation, embeddings, async jobs, and any EmpirioLabs AI tool.",
 	"license": "MIT",
 	"publishConfig": {
 		"access": "public"

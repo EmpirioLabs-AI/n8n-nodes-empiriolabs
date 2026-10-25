@@ -13,6 +13,7 @@ import { createEmbedding } from './actions/embedding';
 import { generateImage } from './actions/image';
 import { getJob, getManyJobs } from './actions/job';
 import { getManyModels } from './actions/model';
+import { runTool } from './actions/tool';
 import { generateVideo } from './actions/video';
 import { audioFields, audioOperations } from './descriptions/AudioDescription';
 import { chatFields, chatOperations } from './descriptions/ChatDescription';
@@ -20,6 +21,7 @@ import { embeddingFields, embeddingOperations } from './descriptions/EmbeddingDe
 import { imageFields, imageOperations } from './descriptions/ImageDescription';
 import { jobFields, jobOperations } from './descriptions/JobDescription';
 import { modelFields, modelOperations } from './descriptions/ModelDescription';
+import { toolFields, toolOperations } from './descriptions/ToolDescription';
 import { videoFields, videoOperations } from './descriptions/VideoDescription';
 import {
 	getChatModels,
@@ -27,11 +29,13 @@ import {
 	getImageModels,
 	getModelCategories,
 	getSpeechModels,
+	getTools,
 	getTranscriptionModels,
 	getVideoModels,
 	getVoices,
 } from './methods/loadOptions';
 import { searchJobs } from './methods/listSearch';
+import { getToolFields } from './methods/resourceMapping';
 
 type OperationHandler = (
 	this: IExecuteFunctions,
@@ -45,6 +49,7 @@ const OPERATIONS: Record<string, Record<string, OperationHandler>> = {
 	image: { generate: generateImage },
 	job: { get: getJob, getAll: getManyJobs },
 	model: { getAll: getManyModels },
+	tool: { run: runTool },
 	video: { generate: generateVideo },
 };
 
@@ -57,7 +62,7 @@ export class Empiriolabs implements INodeType {
 		version: 1,
 		subtitle: '={{ $parameter["operation"] + ": " + $parameter["resource"] }}',
 		description:
-			'Use EmpirioLabs AI models for chat, images, speech, transcription, video, and embeddings',
+			'Use EmpirioLabs AI models for chat, images, speech, transcription, video, and embeddings, and run any EmpirioLabs AI tool',
 		defaults: {
 			name: 'EmpirioLabs AI',
 		},
@@ -83,6 +88,7 @@ export class Empiriolabs implements INodeType {
 					{ name: 'Image', value: 'image' },
 					{ name: 'Job', value: 'job' },
 					{ name: 'Model', value: 'model' },
+					{ name: 'Tool', value: 'tool' },
 					{ name: 'Video', value: 'video' },
 				],
 				default: 'chat',
@@ -99,6 +105,8 @@ export class Empiriolabs implements INodeType {
 			...jobFields,
 			...modelOperations,
 			...modelFields,
+			...toolOperations,
+			...toolFields,
 			...videoOperations,
 			...videoFields,
 		],
@@ -111,12 +119,16 @@ export class Empiriolabs implements INodeType {
 			getImageModels,
 			getModelCategories,
 			getSpeechModels,
+			getTools,
 			getTranscriptionModels,
 			getVideoModels,
 			getVoices,
 		},
 		listSearch: {
 			searchJobs,
+		},
+		resourceMapping: {
+			getToolFields,
 		},
 	};
 

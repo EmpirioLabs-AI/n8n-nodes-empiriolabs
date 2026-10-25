@@ -12,6 +12,12 @@ import { NodeApiError, NodeOperationError, sleep } from 'n8n-workflow';
 
 export const API_BASE_URL = 'https://api.empiriolabs.ai/v1';
 
+/**
+ * The EmpirioLabs AI MCP server, with the set of tools for workflow steps. It takes the same
+ * API key as the API, and its tool list is where Run a Tool gets each tool and its arguments.
+ */
+export const MCP_URL = 'https://mcp.empiriolabs.ai/mcp/workflows';
+
 export const CREDENTIAL_NAME = 'empirioLabsApi';
 
 export type RequestContext = IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions;
@@ -56,6 +62,54 @@ export async function apiRequest(
 	} catch (error) {
 		throw new NodeApiError(this.getNode(), error as JsonObject);
 	}
+}
+
+export const TOOL_ERROR_MESSAGE = 'EmpirioLabs AI could not run this tool.';
+
+/**
+ * Sends one JSON-RPC request to the EmpirioLabs AI MCP server and returns its result.
+ * A JSON-RPC error becomes an error with the server's message.
+ */
+export async function mcpRequest(
+	this: RequestContext,
+	method: string,
+	params: IDataObject,
+	itemIndex?: number,
+): Promise<IDataObject> {
+	let response: unknown;
+	try {
+		response = await this.helpers.httpRequestWithAuthentication.call(this, CREDENTIAL_NAME, {
+			method: 'POST',
+			url: MCP_URL,
+			body: { jsonrpc: '2.0', id: 1, method, params },
+			json: true,
+			headers: { Accept: 'application/json, text/event-stream' },
+			sendCredentialsOnCrossOriginRedirect: false,
+		});
+	} catch (error) {
+		throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex });
+	}
+
+	if (!isDataObject(response) || (response.result === undefined && response.error === undefined)) {
+		throw new NodeOperationError(this.getNode(), 'The tool response could not be read', {
+			itemIndex,
+			description: 'Try again in a moment',
+		});
+	}
+	if (response.error !== undefined && response.error !== null) {
+		const message = isDataObject(response.error) ? cleanCopy(response.error.message) : '';
+		throw new NodeOperationError(this.getNode(), message || TOOL_ERROR_MESSAGE, { itemIndex });
+	}
+	return isDataObject(response.result) ? response.result : {};
+}
+
+/** Lists the tools of the MCP server, each with its name, title, description and input schema. */
+export async function listTools(this: RequestContext): Promise<IDataObject[]> {
+	const result = await mcpRequest.call(this, 'tools/list', {});
+	const tools = Array.isArray(result.tools) ? (result.tools as unknown[]) : [];
+	return tools
+		.filter(isDataObject)
+		.filter((tool) => typeof tool.name === 'string' && tool.name !== '');
 }
 
 /**
@@ -137,6 +191,13 @@ export function parseJson(text: string): unknown {
 	} catch {
 		return undefined;
 	}
+}
+
+const EM_DASH = new RegExp(`\\s*${String.fromCharCode(0x2014)}\\s*`, 'g');
+
+/** Text from EmpirioLabs AI, such as a tool title or message, on one line and without em dashes. */
+export function cleanCopy(text: unknown): string {
+	return typeof text === 'string' ? text.replace(EM_DASH, ', ').replace(/\s+/g, ' ').trim() : '';
 }
 
 /**
