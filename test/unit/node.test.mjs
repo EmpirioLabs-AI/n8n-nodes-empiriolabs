@@ -29,34 +29,13 @@ describe('node description', () => {
 		const resource = description.properties.find((property) => property.name === 'resource');
 		assert.deepEqual(
 			resource.options.map((option) => option.value),
-			['audio', 'chat', 'embedding', 'image', 'job', 'model', 'tool', 'video'],
+			['audio', 'chat', 'document', 'embedding', 'image', 'job', 'model', 'video', 'webSearch'],
 		);
-	});
-
-	it('loads the tool list and the arguments of each tool from the API', () => {
-		const find = (name) => node.description.properties.find((property) => property.name === name);
-		const tool = find('tool');
-		assert.equal(tool.type, 'options');
-		assert.equal(tool.options, undefined);
-		assert.ok(tool.typeOptions.loadOptionsMethod in node.methods.loadOptions);
-
-		const toolArguments = find('toolArguments');
-		assert.equal(toolArguments.type, 'resourceMapper');
-		assert.deepEqual(toolArguments.default, { mappingMode: 'defineBelow', value: null });
-		assert.deepEqual(toolArguments.typeOptions.loadOptionsDependsOn, ['tool']);
-		assert.ok(
-			toolArguments.typeOptions.resourceMapper.resourceMapperMethod in node.methods.resourceMapping,
-		);
-		assert.deepEqual(
-			find('inputMode').options.map((option) => option.value),
-			['fields', 'json'],
-		);
-		assert.equal(find('jsonArguments').type, 'json');
 	});
 
 	it('loads every model list from the API instead of a fixed list', () => {
 		const modelFields = node.description.properties.filter((property) => property.name === 'model');
-		assert.equal(modelFields.length, 6);
+		assert.equal(modelFields.length, 8);
 		for (const field of modelFields) {
 			assert.equal(field.type, 'options');
 			assert.ok(field.typeOptions.loadOptionsMethod in node.methods.loadOptions);

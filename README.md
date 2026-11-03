@@ -1,6 +1,6 @@
 # n8n-nodes-empiriolabs
 
-This is an n8n community node package. It lets you use [EmpirioLabs AI](https://empiriolabs.ai) in your n8n workflows for chat, image generation, text to speech, transcription, video generation, and embeddings, and to run any EmpirioLabs AI tool, such as reading a document or searching the web. It can also start a workflow when a generation job finishes.
+This is an n8n community node package. It lets you use [EmpirioLabs AI](https://empiriolabs.ai) in your n8n workflows for chat, image generation, text to speech, transcription, video generation, embeddings, document reading (OCR), and web search. It can also start a workflow when a generation job finishes.
 
 EmpirioLabs AI is a specialized AI inference and integration provider. It self-hosts open-source models on GPU infrastructure it manages, runs optimized endpoints for proprietary models, helps teams ship their own models to large audiences, and offers on-demand GPU Cloud instances and hosted AI agents. Its model catalog covers text, image, audio, video, transcription, embedding, reranking, research, and 3D models.
 
@@ -29,27 +29,18 @@ The **EmpirioLabs AI** node supports these resources and operations. Every model
 | Audio | Text to Speech | Turns text into speech and returns the audio as a binary file. Choose a model, a voice the model offers, and optionally a language and output format. |
 | Audio | Transcribe | Turns speech into text from a binary file in the input item or from a public HTTPS file URL. Waits for the transcript by default and returns the text, language, and duration. |
 | Chat | Create Completion | Sends a prompt (with an optional system message) or a full conversation to a chat model and returns the reply. Options include temperature, maximum number of tokens, top P, and JSON output. |
+| Document | Read | Reads a PDF or an image (PNG, JPEG, WebP, TIFF, BMP, GIF or AVIF) from a binary file in the input item or from a public HTTPS URL, and returns every page as Markdown, plus `text`, the whole document as one Markdown text. Options choose pages, move tables, headers and footers into their own fields, and return image regions. A long document is read in the background, and the node waits for it by default. |
 | Embedding | Create | Returns the embedding vector for a text. |
 | Image | Generate | Creates images from a prompt and returns each image as a binary file in its own item. Options include aspect ratio, resolution, number of images, and reference image URLs for editing. |
 | Job | Get | Returns the status and result of a job. Can also download the finished file as binary data. |
 | Job | Get Many | Returns recent jobs, optionally filtered by status. |
 | Model | Get Many | Returns models from the catalog, optionally filtered by category or search text. |
-| Tool | Run | Runs any EmpirioLabs AI tool, such as reading a document, searching the web, or generating media. See [Run a tool](#run-a-tool). |
 | Video | Generate | Starts a video generation job and returns the job. Turn on **Wait for Completion** to wait for the video, with a timeout, and download it as a binary file. |
+| Web Search | Search | Searches the web with a search model and returns its answer: results with titles, URLs and snippets, an answer, or both, depending on the model. Each model's own fields, such as the number of results, go in **Model Parameters (JSON)**. |
 
 Operations that create content also accept **Model Parameters (JSON)**: extra request fields for the selected model, such as `{"seed": 42}`. Each model lists the fields it accepts on its page in the [model catalog](https://docs.empiriolabs.ai/models-pricing).
 
 The node can be used as a tool by the n8n AI Agent.
-
-### Run a tool
-
-**Tool > Run** (the **Run a tool** action) runs any EmpirioLabs AI tool, such as reading a document, searching the web, or generating media.
-
-- **Tool Name or ID:** the list loads live from EmpirioLabs AI, so new tools appear here without a node update.
-- **Specify Arguments:** with **Using Fields Below**, the arguments of the chosen tool load as fields: text, numbers, switches, dropdowns for fixed choices, and JSON for objects and lists. Required arguments are marked, optional object and list arguments are added from **Add argument**, and empty fields are not sent. A switch starts at the tool's default, and a switch without a default is not sent until you change it. With **Using JSON**, enter all arguments as one JSON object, such as `{"query": "open models"}`.
-- **Output:** one item with `tool`, `text` (the text result), `result` (the structured result), `job_id`, and `status`.
-- **Long jobs:** a tool that starts a long job, such as a video, returns its `job_id` and a `status` such as `processing`. Get the finished result with **Job > Get**, or start a workflow when the job finishes with the trigger.
-- **Errors:** when a tool cannot run, the node shows the message from EmpirioLabs AI, or returns it in the item when **Continue On Fail** is on.
 
 ## Trigger
 
@@ -119,6 +110,10 @@ Versions are published to npm with a provenance statement by the [Publish workfl
 - Support: [support@empiriolabs.ai](mailto:support@empiriolabs.ai)
 
 ## Version history
+
+### 0.3.0
+
+New Document resource (Read: a PDF or an image as Markdown) and Web Search resource (Search), each calling the EmpirioLabs AI API directly with typed fields. They replace the Tool resource of 0.2.0, which is removed.
 
 ### 0.2.0
 

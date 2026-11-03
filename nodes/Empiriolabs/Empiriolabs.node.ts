@@ -9,33 +9,35 @@ import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workf
 
 import { textToSpeech, transcribe } from './actions/audio';
 import { createChatCompletion } from './actions/chat';
+import { readDocument } from './actions/document';
 import { createEmbedding } from './actions/embedding';
 import { generateImage } from './actions/image';
 import { getJob, getManyJobs } from './actions/job';
 import { getManyModels } from './actions/model';
-import { runTool } from './actions/tool';
+import { searchWeb } from './actions/search';
 import { generateVideo } from './actions/video';
 import { audioFields, audioOperations } from './descriptions/AudioDescription';
 import { chatFields, chatOperations } from './descriptions/ChatDescription';
+import { documentFields, documentOperations } from './descriptions/DocumentDescription';
 import { embeddingFields, embeddingOperations } from './descriptions/EmbeddingDescription';
 import { imageFields, imageOperations } from './descriptions/ImageDescription';
 import { jobFields, jobOperations } from './descriptions/JobDescription';
 import { modelFields, modelOperations } from './descriptions/ModelDescription';
-import { toolFields, toolOperations } from './descriptions/ToolDescription';
+import { searchFields, searchOperations } from './descriptions/SearchDescription';
 import { videoFields, videoOperations } from './descriptions/VideoDescription';
 import {
 	getChatModels,
+	getDocumentModels,
 	getEmbeddingModels,
 	getImageModels,
 	getModelCategories,
+	getSearchModels,
 	getSpeechModels,
-	getTools,
 	getTranscriptionModels,
 	getVideoModels,
 	getVoices,
 } from './methods/loadOptions';
 import { searchJobs } from './methods/listSearch';
-import { getToolFields } from './methods/resourceMapping';
 
 type OperationHandler = (
 	this: IExecuteFunctions,
@@ -45,12 +47,13 @@ type OperationHandler = (
 const OPERATIONS: Record<string, Record<string, OperationHandler>> = {
 	audio: { textToSpeech, transcribe },
 	chat: { create: createChatCompletion },
+	document: { read: readDocument },
 	embedding: { create: createEmbedding },
 	image: { generate: generateImage },
 	job: { get: getJob, getAll: getManyJobs },
 	model: { getAll: getManyModels },
-	tool: { run: runTool },
 	video: { generate: generateVideo },
+	webSearch: { search: searchWeb },
 };
 
 export class Empiriolabs implements INodeType {
@@ -62,7 +65,7 @@ export class Empiriolabs implements INodeType {
 		version: 1,
 		subtitle: '={{ $parameter["operation"] + ": " + $parameter["resource"] }}',
 		description:
-			'Use EmpirioLabs AI models for chat, images, speech, transcription, video, and embeddings, and run any EmpirioLabs AI tool',
+			'Use EmpirioLabs AI models for chat, images, speech, transcription, video, embeddings, document reading, and web search',
 		defaults: {
 			name: 'EmpirioLabs AI',
 		},
@@ -84,12 +87,13 @@ export class Empiriolabs implements INodeType {
 				options: [
 					{ name: 'Audio', value: 'audio' },
 					{ name: 'Chat', value: 'chat' },
+					{ name: 'Document', value: 'document' },
 					{ name: 'Embedding', value: 'embedding' },
 					{ name: 'Image', value: 'image' },
 					{ name: 'Job', value: 'job' },
 					{ name: 'Model', value: 'model' },
-					{ name: 'Tool', value: 'tool' },
 					{ name: 'Video', value: 'video' },
+					{ name: 'Web Search', value: 'webSearch' },
 				],
 				default: 'chat',
 			},
@@ -97,6 +101,8 @@ export class Empiriolabs implements INodeType {
 			...audioFields,
 			...chatOperations,
 			...chatFields,
+			...documentOperations,
+			...documentFields,
 			...embeddingOperations,
 			...embeddingFields,
 			...imageOperations,
@@ -105,30 +111,28 @@ export class Empiriolabs implements INodeType {
 			...jobFields,
 			...modelOperations,
 			...modelFields,
-			...toolOperations,
-			...toolFields,
 			...videoOperations,
 			...videoFields,
+			...searchOperations,
+			...searchFields,
 		],
 	};
 
 	methods = {
 		loadOptions: {
 			getChatModels,
+			getDocumentModels,
 			getEmbeddingModels,
 			getImageModels,
 			getModelCategories,
+			getSearchModels,
 			getSpeechModels,
-			getTools,
 			getTranscriptionModels,
 			getVideoModels,
 			getVoices,
 		},
 		listSearch: {
 			searchJobs,
-		},
-		resourceMapping: {
-			getToolFields,
 		},
 	};
 
