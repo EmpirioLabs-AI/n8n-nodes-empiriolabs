@@ -2,12 +2,17 @@
 //
 //   EMPIRIOLABS_LIVE=1 EMPIRIOLABS_API_KEY=... npm run test:live
 //
-// It makes three requests: the credential test (GET /v1/account/usage?limit=1),
-// the public model catalog (GET /v1/models), and one short chat completion on the
-// cheapest chat model in the catalog (override with EMPIRIOLABS_LIVE_MODEL).
-// Only the chat completion is billed. The API key is never printed.
+// It makes these requests: the credential test (GET /v1/account/usage?limit=1),
+// the public model catalog (GET /v1/models), one short chat completion on the
+// cheapest chat model in the catalog (override with EMPIRIOLABS_LIVE_MODEL), one
+// page read from test/fixtures/invoice.png (override the model with
+// EMPIRIOLABS_LIVE_OCR_MODEL) and one web search (EMPIRIOLABS_LIVE_SEARCH_MODEL).
+// The chat completion, the page read and the search are billed. The API key is never printed.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { createExecuteContext, createLoadOptionsContext, loadDist } from '../helpers/context.mjs';
 
@@ -161,5 +166,83 @@ describe('live EmpirioLabs AI API', { skip }, () => {
 			`chat completion: model=${result.model ?? model} finish_reason=${result.finish_reason} ` +
 				`tokens=${result.usage.total_tokens ?? 'n/a'} reply=${JSON.stringify(String(result.content).slice(0, 40))}`,
 		);
+	});
+
+	it('reads one page through the Document resource', async () => {
+		const catalog = await send(
+			{ baseURL: 'https://api.empiriolabs.ai/v1', url: '/models', method: 'GET', json: true },
+			{ authenticate: false },
+		);
+		const loadContext = createLoadOptionsContext({ respond: (request) => send(request) });
+		const documentModels =
+			await new Empiriolabs().methods.loadOptions.getDocumentModels.call(loadContext);
+		assert.ok(documentModels.length > 0, 'the catalog lists a document model');
+		const model = process.env.EMPIRIOLABS_LIVE_OCR_MODEL || documentModels[0].value;
+		assert.ok(catalog.data.some((entry) => entry.id === model), `${model} is in the catalog`);
+
+		const fixture = path.join(
+			path.dirname(fileURLToPath(import.meta.url)),
+			'..',
+			'fixtures',
+			'invoice.png',
+		);
+		const context = createExecuteContext({
+			parameters: {
+				resource: 'document',
+				operation: 'read',
+				model,
+				inputSource: 'binaryData',
+				binaryPropertyName: 'data',
+				waitForCompletion: true,
+				options: { timeout: 300 },
+			},
+			binary: {
+				data: {
+					data: readFileSync(fixture).toString('base64'),
+					mimeType: 'image/png',
+					fileName: 'invoice.png',
+					fileExtension: 'png',
+				},
+			},
+			respond: (request) => send(request),
+		});
+		const [output] = await new Empiriolabs().execute.call(context);
+		const result = output[0].json;
+
+		assert.equal(context.calls[0].url, '/ocr');
+		assert.match(result.text, /120[.,]00/);
+		assert.match(result.text, /INVOICE\s*42/i);
+		console.log(
+			`document read: model=${model} pages=${result.pages.length} text=${JSON.stringify(result.text.slice(0, 60))}`,
+		);
+	});
+
+	it('searches the web through the Web Search resource', async () => {
+		const loadContext = createLoadOptionsContext({ respond: (request) => send(request) });
+		const searchModels =
+			await new Empiriolabs().methods.loadOptions.getSearchModels.call(loadContext);
+		const ids = searchModels.map((option) => option.value);
+		assert.ok(ids.length > 0, 'the catalog lists a search model');
+		const model =
+			process.env.EMPIRIOLABS_LIVE_SEARCH_MODEL || (ids.includes('tavily-search') ? 'tavily-search' : ids[0]);
+
+		const context = createExecuteContext({
+			parameters: {
+				resource: 'webSearch',
+				operation: 'search',
+				model,
+				query: 'n8n workflow automation',
+				waitForCompletion: true,
+				options: { timeout: 300 },
+			},
+			respond: (request) => send(request),
+		});
+		const [output] = await new Empiriolabs().execute.call(context);
+		const result = output[0].json;
+
+		assert.equal(context.calls[0].url, '/search');
+		const text = JSON.stringify(result);
+		assert.match(text, /https?:\/\//, 'the answer links to at least one page');
+		console.log(`web search: model=${model} answer=${text.length} characters`);
 	});
 });

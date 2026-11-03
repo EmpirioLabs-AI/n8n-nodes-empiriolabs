@@ -1,6 +1,6 @@
 import type { IDataObject, ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
 
-import { apiRequest, cleanCopy, isDataObject, listTools } from '../transport';
+import { apiRequest, isDataObject } from '../transport';
 
 /**
  * Each operation lists the catalog models whose entry advertises the endpoint it calls.
@@ -13,6 +13,8 @@ const MODEL_FILTERS: Record<string, { endpoint: string; categories: string[] }> 
 	transcription: { endpoint: '/v1/audio/transcriptions', categories: ['transcription'] },
 	video: { endpoint: '/v1/videos/generations', categories: ['video'] },
 	embedding: { endpoint: '/v1/embeddings', categories: ['embedding'] },
+	document: { endpoint: '/v1/ocr', categories: ['ocr'] },
+	search: { endpoint: '/v1/search', categories: [] },
 };
 
 async function fetchCatalog(this: ILoadOptionsFunctions): Promise<IDataObject> {
@@ -94,6 +96,16 @@ export async function getVideoModels(this: ILoadOptionsFunctions): Promise<INode
 	return await modelsFor.call(this, 'video');
 }
 
+export async function getDocumentModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'document');
+}
+
+export async function getSearchModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'search');
+}
+
 export async function getEmbeddingModels(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
@@ -162,37 +174,4 @@ export async function getModelCategories(
 		}
 	}
 	return [...slugs].sort().map((slug) => ({ name: slug, value: slug }));
-}
-
-/** The title of a tool: its annotated title, then its title, then its name. */
-export function toolTitle(tool: IDataObject): string {
-	const annotations = isDataObject(tool.annotations) ? tool.annotations : {};
-	for (const candidate of [annotations.title, tool.title, tool.name]) {
-		const title = cleanCopy(candidate);
-		if (title !== '') {
-			return title;
-		}
-	}
-	return String(tool.name);
-}
-
-export function buildToolOptions(tools: IDataObject[]): INodePropertyOptions[] {
-	return tools
-		.map((tool) => {
-			const option: INodePropertyOptions = { name: toolTitle(tool), value: String(tool.name) };
-			const description = cleanCopy(tool.description);
-			if (description !== '') {
-				option.description = description;
-			}
-			return option;
-		})
-		.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * Lists every tool of the EmpirioLabs AI MCP server for Run a Tool, sorted by title.
- * The list is read live, so a new tool appears here without a node update.
- */
-export async function getTools(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-	return buildToolOptions(await listTools.call(this));
 }
