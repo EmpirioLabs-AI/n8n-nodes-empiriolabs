@@ -16,6 +16,7 @@ import {
 	parseJson,
 	parseJsonObjectParameter,
 	resolveMediaReference,
+	startedJobItems,
 	waitForJob,
 } from '../transport';
 import type { MediaFile } from '../transport';
@@ -120,6 +121,69 @@ export async function textToSpeech(
 			pairedItem: { item: itemIndex },
 		},
 	];
+}
+
+export function buildAudioGenerationBody(this: IExecuteFunctions, itemIndex: number): IDataObject {
+	const model = this.getNodeParameter('model', itemIndex) as string;
+	const prompt = this.getNodeParameter('prompt', itemIndex, '') as string;
+	const options = this.getNodeParameter('options', itemIndex, {}) as IDataObject;
+
+	const optional: IDataObject = {};
+	if (typeof prompt === 'string' && prompt.trim() !== '') {
+		optional.prompt = prompt;
+	}
+	if (typeof options.lyrics === 'string' && options.lyrics !== '') {
+		optional.lyrics = options.lyrics;
+	}
+	if (typeof options.duration === 'number') {
+		optional.duration = options.duration;
+	}
+	if (typeof options.steps === 'number') {
+		optional.steps = options.steps;
+	}
+	if (typeof options.cfgScale === 'number') {
+		optional.cfg_scale = options.cfgScale;
+	}
+	if (typeof options.seed === 'number') {
+		optional.seed = options.seed;
+	}
+	if (typeof options.outputFormat === 'string' && options.outputFormat !== '') {
+		optional.output_format = options.outputFormat;
+	}
+	const extra = parseJsonObjectParameter.call(
+		this,
+		options.modelParameters,
+		'Model Parameters (JSON)',
+		itemIndex,
+	);
+	return { ...optional, ...extra, model };
+}
+
+/**
+ * Starts a music or sound effect job. The output is the job, or with Wait for Completion on,
+ * the finished job with each audio file downloaded as a binary file.
+ */
+export async function generateAudio(
+	this: IExecuteFunctions,
+	itemIndex: number,
+): Promise<INodeExecutionData[]> {
+	const options = this.getNodeParameter('options', itemIndex, {}) as IDataObject;
+	const body = buildAudioGenerationBody.call(this, itemIndex);
+	const started = await apiRequest.call(this, 'POST', '/audio/generations', body);
+
+	return await startedJobItems.call(this, started, itemIndex, {
+		wait: this.getNodeParameter('waitForCompletion', itemIndex, false) as boolean,
+		timeoutSeconds: this.getNodeParameter('timeout', itemIndex, 600) as number,
+		pollSeconds: 5,
+		download: this.getNodeParameter('downloadAudio', itemIndex, true) as boolean,
+		field: binaryFieldName(options),
+		naming: {
+			baseName: 'audio',
+			mimeType: mimeTypeForAudioFormat(body.output_format) ?? 'audio/mpeg',
+			extension: 'mp3',
+		},
+		downloadToggle: 'Download Audio',
+	});
 }
 
 export function simplifyTranscript(result: IDataObject, jobId?: unknown): IDataObject {

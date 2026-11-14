@@ -1,20 +1,29 @@
 import type { IDataObject, ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
 
-import { apiRequest, isDataObject } from '../transport';
+import { apiRequest, isDataObject, listEntries } from '../transport';
 
 /**
  * Each operation lists the catalog models whose entry advertises the endpoint it calls.
  * The category is a fallback for entries that do not list their endpoints.
  */
-const MODEL_FILTERS: Record<string, { endpoint: string; categories: string[] }> = {
+const MODEL_FILTERS: Record<string, { endpoint: string; method?: string; categories: string[] }> = {
 	chat: { endpoint: '/v1/chat/completions', categories: ['text'] },
 	image: { endpoint: '/v1/images/generations', categories: ['image'] },
+	imageEdit: { endpoint: '/v1/images/edits', categories: [] },
 	speech: { endpoint: '/v1/audio/speech', categories: [] },
+	audioGeneration: { endpoint: '/v1/audio/generations', categories: [] },
+	voice: { endpoint: '/v1/voices', method: 'GET', categories: [] },
 	transcription: { endpoint: '/v1/audio/transcriptions', categories: ['transcription'] },
 	video: { endpoint: '/v1/videos/generations', categories: ['video'] },
+	threeD: { endpoint: '/v1/3d/generations', categories: ['3d'] },
 	embedding: { endpoint: '/v1/embeddings', categories: ['embedding'] },
+	rerank: { endpoint: '/v1/reranks', categories: ['reranker'] },
+	decision: { endpoint: '/v1/decisions', categories: ['decision'] },
+	detection: { endpoint: '/v1/detect', categories: [] },
 	document: { endpoint: '/v1/ocr', categories: ['ocr'] },
 	search: { endpoint: '/v1/search', categories: [] },
+	answer: { endpoint: '/v1/answer', categories: [] },
+	research: { endpoint: '/v1/research', categories: [] },
 };
 
 async function fetchCatalog(this: ILoadOptionsFunctions): Promise<IDataObject> {
@@ -30,15 +39,37 @@ export function modelSupports(model: IDataObject, filterKey: string): boolean {
 	if (!filter) {
 		return false;
 	}
+	const route = `${filter.method ?? 'POST'} ${filter.endpoint}`.toUpperCase();
 	const endpoints = model.supported_endpoints;
 	if (Array.isArray(endpoints) && endpoints.length > 0) {
 		return endpoints.some(
-			(entry) =>
-				typeof entry === 'string' &&
-				entry.trim().toUpperCase() === `POST ${filter.endpoint}`.toUpperCase(),
+			(entry) => typeof entry === 'string' && entry.trim().toUpperCase() === route,
 		);
 	}
 	return filter.categories.includes(String(model.category ?? ''));
+}
+
+function listsModality(list: unknown, modality: string): boolean {
+	return (
+		Array.isArray(list) &&
+		list.some((entry) => typeof entry === 'string' && entry.trim().toLowerCase() === modality)
+	);
+}
+
+/** Whether a model's catalog entry lists image among the inputs it reads. */
+export function modelReadsImages(model: IDataObject): boolean {
+	return listsModality(model.input_modalities, 'image');
+}
+
+/**
+ * Whether a model can answer a question about an image as text: it reads images, and its
+ * outputs, when the catalog lists them, include text.
+ */
+export function modelAnswersAboutImages(model: IDataObject): boolean {
+	const outputs = model.output_modalities;
+	const writesText =
+		!Array.isArray(outputs) || outputs.length === 0 || listsModality(outputs, 'text');
+	return modelReadsImages(model) && writesText;
 }
 
 export function toModelOption(model: IDataObject): INodePropertyOptions {
@@ -55,11 +86,16 @@ export function toModelOption(model: IDataObject): INodePropertyOptions {
 	return { name, value: id, description: parts.join(' ') };
 }
 
-export function buildModelOptions(catalog: IDataObject, filterKey: string): INodePropertyOptions[] {
+export function buildModelOptions(
+	catalog: IDataObject,
+	filterKey: string,
+	accepts: (model: IDataObject) => boolean = () => true,
+): INodePropertyOptions[] {
 	return catalogModels(catalog)
 		.filter((model) => typeof model.id === 'string' && model.id !== '')
 		.filter((model) => model.status === undefined || model.status === 'available')
 		.filter((model) => modelSupports(model, filterKey))
+		.filter(accepts)
 		.map(toModelOption)
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -67,9 +103,10 @@ export function buildModelOptions(catalog: IDataObject, filterKey: string): INod
 async function modelsFor(
 	this: ILoadOptionsFunctions,
 	filterKey: string,
+	accepts?: (model: IDataObject) => boolean,
 ): Promise<INodePropertyOptions[]> {
 	const catalog = await fetchCatalog.call(this);
-	return buildModelOptions(catalog, filterKey);
+	return buildModelOptions(catalog, filterKey, accepts);
 }
 
 export async function getChatModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
@@ -80,10 +117,37 @@ export async function getImageModels(this: ILoadOptionsFunctions): Promise<INode
 	return await modelsFor.call(this, 'image');
 }
 
+export async function getImageEditModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'imageEdit');
+}
+
+/**
+ * Lists the models that can answer a question about an image: the chat models whose catalog
+ * entry lists image input and, among its outputs, text.
+ */
+export async function getVisionModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'chat', modelAnswersAboutImages);
+}
+
 export async function getSpeechModels(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
 	return await modelsFor.call(this, 'speech');
+}
+
+export async function getAudioGenerationModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'audioGeneration');
+}
+
+/** Lists the text to speech models that have a voice list. */
+export async function getVoiceModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'voice');
 }
 
 export async function getTranscriptionModels(
@@ -96,20 +160,58 @@ export async function getVideoModels(this: ILoadOptionsFunctions): Promise<INode
 	return await modelsFor.call(this, 'video');
 }
 
+export async function getThreeDModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'threeD');
+}
+
 export async function getDocumentModels(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
 	return await modelsFor.call(this, 'document');
 }
 
-export async function getSearchModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+export async function getSearchModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
 	return await modelsFor.call(this, 'search');
+}
+
+export async function getAnswerModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'answer');
+}
+
+export async function getResearchModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'research');
 }
 
 export async function getEmbeddingModels(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
 	return await modelsFor.call(this, 'embedding');
+}
+
+export async function getRerankModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'rerank');
+}
+
+export async function getDecisionModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'decision');
+}
+
+export async function getDetectionModels(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return await modelsFor.call(this, 'detection');
 }
 
 /**
@@ -143,6 +245,40 @@ export async function getVoices(this: ILoadOptionsFunctions): Promise<INodePrope
 		}
 	}
 	return options;
+}
+
+export function toTemplateOption(template: IDataObject): INodePropertyOptions {
+	const slug = String(template.slug);
+	const name =
+		typeof template.display_name === 'string' && template.display_name
+			? template.display_name
+			: slug;
+	const parts: string[] = [`ID: ${slug}.`];
+	if (typeof template.description === 'string' && template.description) {
+		parts.push(template.description);
+	}
+	return { name, value: slug, description: parts.join(' ') };
+}
+
+export function buildTemplateOptions(response: IDataObject): INodePropertyOptions[] {
+	return listEntries(response)
+		.filter((template) => typeof template.slug === 'string' && template.slug !== '')
+		.map(toTemplateOption)
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Lists the image generation templates. */
+export async function getImageTemplates(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return buildTemplateOptions(await apiRequest.call(this, 'GET', '/images/templates'));
+}
+
+/** Lists the video generation templates. */
+export async function getVideoTemplates(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return buildTemplateOptions(await apiRequest.call(this, 'GET', '/videos/templates'));
 }
 
 /**

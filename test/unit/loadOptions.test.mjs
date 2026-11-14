@@ -81,6 +81,157 @@ describe('model lists come from the live catalog', () => {
 	});
 });
 
+describe('model lists of the operations added in 0.4.0', () => {
+	const catalog = {
+		object: 'list',
+		data: [
+			{
+				id: 'vision-chat',
+				display_name: 'Vision Chat',
+				category: 'text',
+				status: 'available',
+				input_modalities: ['text', 'image'],
+				output_modalities: ['text'],
+				supported_endpoints: ['POST /v1/chat/completions'],
+			},
+			{
+				id: 'older-vision',
+				display_name: 'Older Vision',
+				category: 'text',
+				status: 'available',
+				input_modalities: ['text', 'image'],
+				supported_endpoints: ['POST /v1/chat/completions'],
+			},
+			{
+				id: 'text-chat',
+				display_name: 'Text Chat',
+				category: 'text',
+				status: 'available',
+				input_modalities: ['text'],
+				supported_endpoints: ['POST /v1/chat/completions'],
+			},
+			{
+				id: 'retired-vision',
+				category: 'text',
+				status: 'unavailable',
+				input_modalities: ['text', 'image'],
+				supported_endpoints: ['POST /v1/chat/completions'],
+			},
+			{
+				id: 'edit-image',
+				category: 'image',
+				input_modalities: ['text', 'image'],
+				supported_endpoints: ['POST /v1/images/generations', 'POST /v1/images/edits'],
+			},
+			{
+				id: 'plain-image',
+				category: 'image',
+				input_modalities: ['text'],
+				supported_endpoints: ['POST /v1/images/generations'],
+			},
+			{ id: 'tune-maker', category: 'audio', supported_endpoints: ['POST /v1/audio/generations'] },
+			{
+				id: 'speech-model',
+				category: 'audio',
+				supported_endpoints: ['POST /v1/audio/speech', 'GET /v1/voices'],
+			},
+			{ id: 'plain-speech', category: 'audio', supported_endpoints: ['POST /v1/audio/speech'] },
+			{ id: 'old-audio', category: 'audio' },
+			{ id: 'mesh-maker', category: '3d', supported_endpoints: ['POST /v1/3d/generations'] },
+			{ id: 'old-mesh', category: '3d' },
+			{
+				id: 'decision-model',
+				category: 'decision',
+				input_modalities: ['text', 'image'],
+				output_modalities: ['decision'],
+				supported_endpoints: ['POST /v1/decisions', 'POST /v1/chat/completions'],
+			},
+			{
+				id: 'detect-model',
+				category: 'tools',
+				supported_endpoints: ['POST /v1/detect', 'POST /v1/chat/completions'],
+			},
+			{ id: 'agent-tool', category: 'tools', supported_endpoints: ['POST /v1/agents/run'] },
+			{ id: 'old-tool', category: 'tools' },
+			{ id: 'rerank-model', category: 'reranker', supported_endpoints: ['POST /v1/reranks'] },
+			{ id: 'old-rerank', category: 'reranker' },
+			{
+				id: 'answer-model',
+				category: 'research',
+				supported_endpoints: ['POST /v1/answer', 'POST /v1/search'],
+			},
+			{
+				id: 'research-model',
+				category: 'research',
+				supported_endpoints: ['POST /v1/research', 'POST /v1/search'],
+			},
+			{ id: 'search-model', category: 'research', supported_endpoints: ['POST /v1/search'] },
+		],
+	};
+
+	async function list(method) {
+		const context = createLoadOptionsContext({ respond: () => catalog });
+		const options = await loadOptions[method].call(context);
+		assert.equal(context.calls.length, 1);
+		assert.equal(context.calls[0].method, 'GET');
+		assert.equal(context.calls[0].url, '/models');
+		return options.map((option) => option.value);
+	}
+
+	it('lists each model list by the endpoint its operation calls', async () => {
+		assert.deepEqual(await list('getImageEditModels'), ['edit-image']);
+		assert.deepEqual(await list('getAudioGenerationModels'), ['tune-maker']);
+		assert.deepEqual(await list('getDetectionModels'), ['detect-model']);
+		assert.deepEqual(await list('getAnswerModels'), ['answer-model']);
+		assert.deepEqual(await list('getResearchModels'), ['research-model']);
+		assert.deepEqual(await list('getSearchModels'), [
+			'answer-model',
+			'research-model',
+			'search-model',
+		]);
+	});
+
+	it('falls back to the category only where the category names the operation', async () => {
+		assert.deepEqual(await list('getThreeDModels'), ['mesh-maker', 'old-mesh']);
+		assert.deepEqual(await list('getRerankModels'), ['old-rerank', 'rerank-model']);
+		assert.deepEqual(await list('getDecisionModels'), ['decision-model']);
+	});
+
+	it('lists the models with a voice list by the GET endpoint', async () => {
+		assert.deepEqual(await list('getVoiceModels'), ['speech-model']);
+		assert.equal(
+			loadOptions.modelSupports({ supported_endpoints: ['get /v1/voices '] }, 'voice'),
+			true,
+		);
+		assert.equal(
+			loadOptions.modelSupports({ supported_endpoints: ['POST /v1/voices'] }, 'voice'),
+			false,
+		);
+	});
+
+	it('lists the chat models that read images and answer in text for image analysis', async () => {
+		// A model that reads images but does not answer in text, such as a decision model, is left out.
+		assert.deepEqual(await list('getVisionModels'), ['older-vision', 'vision-chat']);
+		assert.equal(loadOptions.modelReadsImages({ input_modalities: ['Text', ' IMAGE '] }), true);
+		assert.equal(loadOptions.modelReadsImages({ input_modalities: ['text'] }), false);
+		assert.equal(loadOptions.modelReadsImages({}), false);
+		assert.equal(
+			loadOptions.modelAnswersAboutImages({
+				input_modalities: ['image'],
+				output_modalities: ['Text', 'audio'],
+			}),
+			true,
+		);
+		assert.equal(
+			loadOptions.modelAnswersAboutImages({
+				input_modalities: ['image'],
+				output_modalities: ['image'],
+			}),
+			false,
+		);
+	});
+});
+
 describe('job picker', () => {
 	const listSearch = loadDist('nodes/Empiriolabs/methods/listSearch.js');
 

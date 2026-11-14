@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -16,6 +17,22 @@ function walk(directory) {
 	});
 }
 
+/** The paths npm would put in the published package, from a dry run of `npm pack`. */
+function publishedFiles() {
+	const args = ['pack', '--dry-run', '--json', '--ignore-scripts'];
+	// npm_execpath points at npm's own CLI when the tests run through `npm test`.
+	const npmCli = process.env.npm_execpath;
+	const output =
+		npmCli && npmCli.endsWith('.js')
+			? execFileSync(process.execPath, [npmCli, ...args], { cwd: root, encoding: 'utf8' })
+			: execFileSync('npm', args, {
+					cwd: root,
+					encoding: 'utf8',
+					shell: process.platform === 'win32',
+				});
+	return JSON.parse(output)[0].files.map((file) => file.path);
+}
+
 describe('package', () => {
 	it('meets the community package requirements', () => {
 		assert.equal(pkg.name, 'n8n-nodes-empiriolabs');
@@ -23,7 +40,7 @@ describe('package', () => {
 		assert.ok(pkg.keywords.includes('n8n-community-node-package'));
 		assert.equal(pkg.dependencies, undefined, 'no runtime dependencies');
 		assert.deepEqual(pkg.peerDependencies, { 'n8n-workflow': '*' });
-		assert.deepEqual(pkg.files, ['dist']);
+		assert.deepEqual(pkg.files, ['dist', '!dist/docs', '!dist/test']);
 		assert.equal(
 			pkg.repository.url,
 			'git+https://github.com/EmpirioLabs-AI/n8n-nodes-empiriolabs.git',
@@ -39,11 +56,43 @@ describe('package', () => {
 		assert.ok(existsSync(path.join(root, 'dist', 'icons', 'empiriolabs.png')));
 	});
 
+	it('publishes the built nodes and the icon, and no other image', () => {
+		const files = publishedFiles();
+		for (const entry of [...pkg.n8n.nodes, ...pkg.n8n.credentials]) {
+			assert.ok(files.includes(entry), `${entry} is published`);
+		}
+		// The build copies every image of the repository into dist: only the icon is published.
+		assert.deepEqual(
+			files.filter((file) => /\.(png|svg|jpe?g|gif|webp)$/i.test(file)),
+			['dist/icons/empiriolabs.png'],
+		);
+		assert.deepEqual(
+			files.filter((file) => !/^(dist\/|package\.json$|README\.md$|LICENSE\.md$)/.test(file)),
+			[],
+		);
+		assert.deepEqual(
+			files.filter((file) => /^dist\/(?!credentials\/|icons\/|nodes\/)[^/]+\//.test(file)),
+			[],
+		);
+	});
+
+	it('describes its version in the changelog and the README', () => {
+		assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+		const lines = (file) => readFileSync(path.join(root, file), 'utf8').split(/\r?\n/);
+		const changelogVersions = lines('CHANGELOG.md').filter((line) => line.startsWith('## '));
+		assert.equal(changelogVersions[0], `## ${pkg.version}`, 'the changelog opens with it');
+		assert.ok(
+			lines('README.md').includes(`### ${pkg.version}`),
+			'the README version history has it',
+		);
+	});
+
 	it('keeps user-facing files free of em dashes', () => {
 		const files = [
 			...walk(path.join(root, 'nodes')),
 			...walk(path.join(root, 'credentials')),
 			path.join(root, 'README.md'),
+			path.join(root, 'CHANGELOG.md'),
 			path.join(root, 'package.json'),
 		].filter((file) => /\.(ts|json|md)$/.test(file));
 		for (const file of files) {

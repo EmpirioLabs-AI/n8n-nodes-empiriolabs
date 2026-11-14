@@ -7,8 +7,11 @@ import {
 	extractMediaReferences,
 	fileExtension,
 	isDataObject,
+	limitEntries,
+	listEntries,
 	parseJsonObjectParameter,
 	resolveMediaReference,
+	templateListQuery,
 	waitForJob,
 } from '../transport';
 
@@ -92,4 +95,40 @@ export async function generateVideo(
 			pairedItem: { item: itemIndex },
 		},
 	];
+}
+
+export async function getManyVideoTemplates(
+	this: IExecuteFunctions,
+	itemIndex: number,
+): Promise<INodeExecutionData[]> {
+	const filters = this.getNodeParameter('filters', itemIndex, {}) as IDataObject;
+	const response = await apiRequest.call(
+		this,
+		'GET',
+		'/videos/templates',
+		undefined,
+		templateListQuery(filters),
+	);
+	return limitEntries
+		.call(this, listEntries(response), itemIndex)
+		.map((template) => ({ json: template, pairedItem: { item: itemIndex } }));
+}
+
+export async function getVideoTemplate(
+	this: IExecuteFunctions,
+	itemIndex: number,
+): Promise<INodeExecutionData[]> {
+	const slug = String(this.getNodeParameter('template', itemIndex) ?? '').trim();
+	if (slug === '') {
+		throw new NodeOperationError(this.getNode(), 'Select a template or enter a template ID', {
+			itemIndex,
+			description: 'Template IDs are returned by the Get Many Templates operation',
+		});
+	}
+	const template = await apiRequest.call(
+		this,
+		'GET',
+		`/videos/templates/${encodeURIComponent(slug)}`,
+	);
+	return [{ json: template, pairedItem: { item: itemIndex } }];
 }
