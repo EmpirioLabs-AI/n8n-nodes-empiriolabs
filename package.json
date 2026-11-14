@@ -1,7 +1,7 @@
 {
 	"name": "n8n-nodes-empiriolabs",
-	"version": "0.3.0",
-	"description": "n8n nodes for EmpirioLabs AI: chat, image generation, text to speech, transcription, video generation, embeddings, document reading (OCR), web search, and async jobs.",
+	"version": "0.4.0",
+	"description": "n8n nodes for EmpirioLabs AI: chat, image generation, editing and analysis, text to speech, music and sound generation, transcription, video generation, 3D generation, embeddings, reranking, decisions, AI text detection, document reading (OCR), web search and research, and async jobs.",
 	"license": "MIT",
 	"publishConfig": {
 		"access": "public"
@@ -14,12 +14,20 @@
 		"ai",
 		"llm",
 		"image-generation",
+		"image-editing",
+		"image-analysis",
 		"video-generation",
+		"3d-generation",
 		"text-to-speech",
+		"music-generation",
 		"transcription",
 		"embeddings",
+		"reranking",
+		"decisions",
+		"ai-detection",
 		"ocr",
-		"web-search"
+		"web-search",
+		"research"
 	],
 	"author": {
 		"name": "EmpirioLabs AI",
@@ -46,7 +54,9 @@
 		"prepublishOnly": "n8n-node prerelease"
 	},
 	"files": [
-		"dist"
+		"dist",
+		"!dist/docs",
+		"!dist/test"
 	],
 	"n8n": {
 		"n8nNodesApiVersion": 1,

@@ -1,6 +1,6 @@
 import type { INodeProperties } from 'n8n-workflow';
 
-import { modelParametersOption, outputFieldOption } from './shared';
+import { modelParametersOption, outputFieldOption, templateFields } from './shared';
 
 const showForGenerate = { resource: ['video'], operation: ['generate'] };
 
@@ -18,12 +18,27 @@ export const videoOperations: INodeProperties[] = [
 				description: 'Start a video generation job and optionally wait for the video',
 				action: 'Generate a video',
 			},
+			{
+				name: 'Get Many Templates',
+				value: 'getAllTemplates',
+				description: 'Get many video templates',
+				action: 'Get many video templates',
+			},
+			{
+				name: 'Get Template',
+				value: 'getTemplate',
+				description: 'Get a video template',
+				action: 'Get a video template',
+			},
 		],
 		default: 'generate',
 	},
 ];
 
 export const videoFields: INodeProperties[] = [
+	// ----------------------------------
+	//         video: generate
+	// ----------------------------------
 	{
 		displayName: 'Model Name or ID',
 		name: 'model',
@@ -127,4 +142,9 @@ export const videoFields: INodeProperties[] = [
 			},
 		],
 	},
+
+	// ----------------------------------
+	//         video: getTemplate, getAllTemplates
+	// ----------------------------------
+	...templateFields('video', 'getVideoTemplates', 'getVideoModels'),
 ];

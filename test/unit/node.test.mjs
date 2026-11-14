@@ -29,18 +29,214 @@ describe('node description', () => {
 		const resource = description.properties.find((property) => property.name === 'resource');
 		assert.deepEqual(
 			resource.options.map((option) => option.value),
-			['audio', 'chat', 'document', 'embedding', 'image', 'job', 'model', 'video', 'webSearch'],
+			[
+				'threeD',
+				'audio',
+				'chat',
+				'decision',
+				'detection',
+				'document',
+				'embedding',
+				'image',
+				'job',
+				'model',
+				'rerank',
+				'video',
+				'voice',
+				'webSearch',
+			],
 		);
 	});
 
 	it('loads every model list from the API instead of a fixed list', () => {
 		const modelFields = node.description.properties.filter((property) => property.name === 'model');
-		assert.equal(modelFields.length, 8);
+		assert.equal(modelFields.length, 19);
 		for (const field of modelFields) {
+			assert.equal(field.type, 'options');
+			assert.equal(field.required, true);
+			assert.ok(field.typeOptions.loadOptionsMethod in node.methods.loadOptions);
+			assert.equal(field.options, undefined);
+		}
+	});
+
+	it('loads every template and voice list from the API as well', () => {
+		const templateFields = node.description.properties.filter(
+			(property) => property.name === 'template',
+		);
+		assert.equal(templateFields.length, 2);
+		for (const field of templateFields) {
 			assert.equal(field.type, 'options');
 			assert.ok(field.typeOptions.loadOptionsMethod in node.methods.loadOptions);
 			assert.equal(field.options, undefined);
 		}
+
+		// Every list a field loads has its method on the node, at any depth of the description.
+		const methods = [];
+		const visit = (value) => {
+			if (Array.isArray(value)) {
+				value.forEach(visit);
+			} else if (value && typeof value === 'object') {
+				if (typeof value.loadOptionsMethod === 'string') {
+					methods.push(['loadOptions', value.loadOptionsMethod]);
+				}
+				if (typeof value.searchListMethod === 'string') {
+					methods.push(['listSearch', value.searchListMethod]);
+				}
+				Object.values(value).forEach(visit);
+			}
+		};
+		visit(node.description.properties);
+		assert.equal(methods.length, 27);
+		for (const [kind, method] of methods) {
+			assert.equal(typeof node.methods[kind][method], 'function', `${kind}.${method}`);
+		}
+		assert.ok(
+			methods.some(([kind, method]) => kind === 'listSearch' && method === 'searchCustomVoices'),
+		);
+	});
+
+	it('has a handler for every operation of every resource', async () => {
+		const operations = node.description.properties.filter(
+			(property) => property.name === 'operation',
+		);
+		const resources = node.description.properties
+			.find((property) => property.name === 'resource')
+			.options.map((option) => option.value);
+		assert.deepEqual(
+			operations.map((property) => property.displayOptions.show.resource[0]).sort(),
+			[...resources].sort(),
+		);
+
+		const notAvailable = /is not available for the resource/;
+		let count = 0;
+		for (const property of operations) {
+			const [resource] = property.displayOptions.show.resource;
+			for (const option of property.options) {
+				count += 1;
+				assert.equal(typeof option.action, 'string');
+				// With no other parameter a handler runs or stops at its first field, never at the lookup.
+				let message = '';
+				try {
+					await run({ parameters: { resource, operation: option.value }, respond: () => ({}) });
+				} catch (error) {
+					message = error.message;
+				}
+				assert.doesNotMatch(message, notAvailable, `${resource} ${option.value}`);
+			}
+		}
+		assert.equal(count, 26);
+		await assert.rejects(
+			run({ parameters: { resource: 'image', operation: 'unknown' }, respond: () => ({}) }),
+			notAvailable,
+		);
+	});
+
+	it('defines each field once per operation and resolves its defaults in n8n', () => {
+		const { properties } = node.description;
+		const seen = new Set();
+		for (const property of properties) {
+			const show = property.displayOptions?.show;
+			if (!show?.resource || property.name === 'operation') {
+				continue;
+			}
+			for (const resource of show.resource) {
+				for (const operation of show.operation ?? ['*']) {
+					const key = `${resource} ${operation} ${property.name}`;
+					assert.ok(!seen.has(key), `${key} is defined twice`);
+					seen.add(key);
+				}
+			}
+		}
+
+		// n8n's own helper reads the description: the defaults it stores for a new node.
+		const stub = {
+			id: '1',
+			name: 'EmpirioLabs AI',
+			type: 'n8n-nodes-empiriolabs.empiriolabs',
+			typeVersion: 1,
+			position: [0, 0],
+			parameters: {},
+		};
+		const defaults = (values) =>
+			n8nWorkflow.NodeHelpers.getNodeParameters(
+				properties,
+				values,
+				true,
+				false,
+				stub,
+				node.description,
+			);
+		assert.deepEqual(defaults({ resource: 'threeD', operation: 'generate' }), {
+			resource: 'threeD',
+			operation: 'generate',
+			model: '',
+			imageSource: 'binaryData',
+			binaryPropertyName: 'data',
+			waitForCompletion: false,
+			options: {},
+		});
+		assert.deepEqual(defaults({ resource: 'audio', operation: 'generate' }), {
+			resource: 'audio',
+			operation: 'generate',
+			model: '',
+			prompt: '',
+			waitForCompletion: false,
+			options: {},
+		});
+		assert.deepEqual(defaults({ resource: 'image', operation: 'edit' }), {
+			resource: 'image',
+			operation: 'edit',
+			model: '',
+			imageUrls: '',
+			prompt: '',
+			waitForCompletion: true,
+			options: {},
+		});
+		assert.deepEqual(defaults({ resource: 'decision', operation: 'create' }), {
+			resource: 'decision',
+			operation: 'create',
+			model: '',
+			stateType: 'text',
+			stateText: '',
+			questionsMode: 'fields',
+			questions: {},
+			options: {},
+		});
+		// A field that is hidden for the chosen settings is not stored.
+		assert.deepEqual(
+			defaults({
+				resource: 'threeD',
+				operation: 'generate',
+				model: 'mesh-maker',
+				imageSource: 'none',
+				binaryPropertyName: 'photo',
+				waitForCompletion: true,
+				options: { binaryPropertyOutput: 'mesh' },
+			}),
+			{
+				resource: 'threeD',
+				operation: 'generate',
+				model: 'mesh-maker',
+				imageSource: 'none',
+				waitForCompletion: true,
+				timeout: 900,
+				downloadFile: true,
+				options: { binaryPropertyOutput: 'mesh' },
+			},
+		);
+		assert.deepEqual(
+			defaults({
+				resource: 'decision',
+				operation: 'create',
+				model: 'decision-model',
+				questions: { noul: [{ id: 'q', instructions: 'Is it?' }] },
+			}).questions,
+			{
+				noul: [
+					{ id: 'q', instructions: 'Is it?', noCriteria: '', yesCriteria: '', abstain: false },
+				],
+			},
+		);
 	});
 
 	it('keeps user-facing text free of em dashes', () => {

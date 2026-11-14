@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createExecuteContext, loadDist } from '../helpers/context.mjs';
+import { createExecuteContext, loadDist, n8nWorkflow } from '../helpers/context.mjs';
 
 const transport = loadDist('nodes/Empiriolabs/transport.js');
 
@@ -168,6 +168,37 @@ describe('small helpers', () => {
 		);
 	});
 
+	it('reads lines, JSON parameters and resource locator values', () => {
+		assert.deepEqual(transport.splitLines(' one \r\n\r\n two\nthree '), ['one', 'two', 'three']);
+		assert.deepEqual(transport.splitLines(undefined), []);
+		assert.deepEqual(transport.readJsonParameter('["a"]'), ['a']);
+		assert.deepEqual(transport.readJsonParameter({ a: 1 }), { a: 1 });
+		assert.equal(transport.readJsonParameter('{bad'), undefined);
+		assert.equal(transport.readJsonParameter(''), undefined);
+		assert.equal(transport.locatorValue({ __rl: true, mode: 'id', value: ' abc ' }), 'abc');
+		assert.equal(transport.locatorValue(' abc '), 'abc');
+		assert.equal(transport.locatorValue(undefined), '');
+	});
+
+	it('maps file extensions back to MIME types', () => {
+		assert.equal(transport.mimeTypeForExtension('GLB'), 'model/gltf-binary');
+		assert.equal(transport.mimeTypeForExtension('wav'), 'audio/wav');
+		assert.equal(transport.mimeTypeForExtension('obj'), undefined);
+		assert.equal(transport.mimeTypeForExtension(undefined), undefined);
+	});
+
+	it('builds a template list query from the filters', () => {
+		assert.deepEqual(transport.templateListQuery({}), {});
+		assert.deepEqual(
+			transport.templateListQuery({ category: ' viral ', model: 'reel-video', featured: true }),
+			{ category: 'viral', model: 'reel-video', featured: true },
+		);
+		assert.deepEqual(
+			transport.templateListQuery({ category: ' ', model: '', featured: false }),
+			{},
+		);
+	});
+
 	it('sends API requests to the EmpirioLabs AI base URL with the credential', async () => {
 		const context = createExecuteContext({ parameters: {}, respond: () => ({ ok: true }) });
 		await transport.apiRequest.call(context, 'GET', '/jobs', undefined, { limit: 5 });
@@ -178,5 +209,45 @@ describe('small helpers', () => {
 		assert.deepEqual(call.qs, { limit: 5 });
 		assert.equal(call.json, true);
 		assert.equal(call.sendCredentialsOnCrossOriginRedirect, false);
+	});
+
+	it('treats an error body with a success status as an error', async () => {
+		const body = {
+			error: {
+				message: 'The request did not complete within 15 minutes. Please try again.',
+				type: 'server_error',
+				param: null,
+				code: 'timeout',
+				request_id: 'req_1',
+			},
+		};
+		const context = createExecuteContext({ parameters: {}, respond: () => body });
+		await assert.rejects(transport.apiRequest.call(context, 'POST', '/research', {}), (error) => {
+			assert.ok(error instanceof n8nWorkflow.NodeApiError);
+			assert.equal(
+				error.message,
+				'The request did not complete within 15 minutes. Please try again.',
+			);
+			return true;
+		});
+
+		assert.equal(transport.errorBodyMessage(body), body.error.message);
+		assert.equal(
+			transport.errorBodyMessage({ error: { code: 'x', message: 'Unknown model.' } }),
+			'Unknown model.',
+		);
+		// A result that mentions an error, such as a failed job, is a result.
+		assert.equal(
+			transport.errorBodyMessage({ job_id: 'job_1', status: 'failed', error: { message: 'x' } }),
+			undefined,
+		);
+		assert.equal(transport.errorBodyMessage({ error: 'text' }), undefined);
+		assert.equal(transport.errorBodyMessage({ error: {} }), undefined);
+		assert.equal(transport.errorBodyMessage({ error: null }), undefined);
+		assert.equal(transport.errorBodyMessage({ data: [] }), undefined);
+
+		const job = { job_id: 'job_1', status: 'failed', error: { message: 'Prompt was rejected' } };
+		const jobContext = createExecuteContext({ parameters: {}, respond: () => job });
+		assert.deepEqual(await transport.apiRequest.call(jobContext, 'GET', '/jobs/job_1'), job);
 	});
 });

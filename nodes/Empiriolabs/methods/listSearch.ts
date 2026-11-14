@@ -1,6 +1,6 @@
 import type { IDataObject, ILoadOptionsFunctions, INodeListSearchResult } from 'n8n-workflow';
 
-import { apiRequest, isDataObject, normalizeJobStatus } from '../transport';
+import { apiRequest, isDataObject, listEntries, normalizeJobStatus } from '../transport';
 
 /** Formats a job timestamp given as ISO text or as Unix seconds, for example "2026-10-16 10:00:00 UTC". */
 export function formatJobTime(value: unknown): string | undefined {
@@ -48,6 +48,45 @@ export async function searchJobs(
 	const results = jobs
 		.filter((job) => typeof job.job_id === 'string' && job.job_id !== '')
 		.map((job) => ({ name: describeJob(job), value: String(job.job_id) }))
+		.filter((result) => needle === '' || result.name.toLowerCase().includes(needle));
+
+	return { results };
+}
+
+export function describeVoice(voice: IDataObject): string {
+	const id = String(voice.id);
+	const parts: string[] = [];
+	if (typeof voice.name === 'string' && voice.name && voice.name !== id) {
+		parts.push(voice.name);
+	}
+	if (typeof voice.status === 'string' && voice.status) {
+		parts.push(voice.status);
+	}
+	return parts.length > 0 ? `${parts.join(', ')} (${id})` : id;
+}
+
+/**
+ * Lists the account's custom voices on the selected model, for the Voice picker.
+ */
+export async function searchCustomVoices(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+): Promise<INodeListSearchResult> {
+	const model = this.getCurrentNodeParameter('model');
+	if (typeof model !== 'string' || model === '' || model.startsWith('=')) {
+		return { results: [] };
+	}
+	const response = await apiRequest.call(this, 'GET', '/voices', undefined, {
+		model,
+		type: 'custom',
+	});
+	const needle = (filter ?? '').trim().toLowerCase();
+
+	const results = listEntries(response)
+		.filter((voice) => typeof voice.id === 'string' && voice.id !== '')
+		// A preset voice cannot be deleted, so only entries marked as custom, or unmarked, are listed.
+		.filter((voice) => voice.kind === undefined || voice.kind === 'custom')
+		.map((voice) => ({ name: describeVoice(voice), value: String(voice.id) }))
 		.filter((result) => needle === '' || result.name.toLowerCase().includes(needle));
 
 	return { results };

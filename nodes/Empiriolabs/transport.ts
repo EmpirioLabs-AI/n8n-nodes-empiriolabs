@@ -5,6 +5,7 @@ import type {
 	IHttpRequestOptions,
 	ILoadOptionsFunctions,
 	IN8nHttpFullResponse,
+	INodeExecutionData,
 	IPollFunctions,
 	JsonObject,
 } from 'n8n-workflow';
@@ -18,6 +19,19 @@ export type RequestContext = IExecuteFunctions | ILoadOptionsFunctions | IPollFu
 
 export function isDataObject(value: unknown): value is IDataObject {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The message of an error body: an object that holds only `error`, with a message. The answer
+ * to a request that ran for several minutes can carry its error this way, with a success status.
+ */
+export function errorBodyMessage(response: IDataObject): string | undefined {
+	const keys = Object.keys(response);
+	if (keys.length !== 1 || keys[0] !== 'error' || !isDataObject(response.error)) {
+		return undefined;
+	}
+	const { message } = response.error;
+	return typeof message === 'string' && message !== '' ? message : undefined;
 }
 
 /**
@@ -46,16 +60,24 @@ export async function apiRequest(
 		options.qs = qs;
 	}
 
+	let response: unknown;
 	try {
-		const response: unknown = await this.helpers.httpRequestWithAuthentication.call(
+		response = await this.helpers.httpRequestWithAuthentication.call(
 			this,
 			CREDENTIAL_NAME,
 			options,
 		);
-		return isDataObject(response) ? response : { data: response as IDataObject[] };
 	} catch (error) {
 		throw new NodeApiError(this.getNode(), error as JsonObject);
 	}
+	if (!isDataObject(response)) {
+		return { data: response as IDataObject[] };
+	}
+	const message = errorBodyMessage(response);
+	if (message !== undefined) {
+		throw new NodeApiError(this.getNode(), response as JsonObject, { message });
+	}
+	return response;
 }
 
 /**
@@ -137,6 +159,35 @@ export function parseJson(text: string): unknown {
 	} catch {
 		return undefined;
 	}
+}
+
+/** Reads a JSON parameter given as a value or as JSON text. Unreadable text gives undefined. */
+export function readJsonParameter(value: unknown): unknown {
+	return typeof value === 'string' ? parseJson(value) : value;
+}
+
+/** The value of a resource locator parameter, given as its object or as the extracted text. */
+export function locatorValue(value: unknown): string {
+	if (isDataObject(value)) {
+		return String(value.value ?? '').trim();
+	}
+	return typeof value === 'string' ? value.trim() : '';
+}
+
+/** The entries of a list response, which the API returns in `data`. */
+export function listEntries(response: IDataObject): IDataObject[] {
+	return Array.isArray(response.data) ? (response.data as unknown[]).filter(isDataObject) : [];
+}
+
+/** Splits text into its lines, trimmed, without the empty ones. */
+export function splitLines(value: unknown): string[] {
+	if (typeof value !== 'string') {
+		return [];
+	}
+	return value
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line !== '');
 }
 
 /**
@@ -371,6 +422,15 @@ export function extensionForMimeType(mimeType: string | undefined): string | und
 	return EXTENSIONS[mimeType.split(';')[0].trim().toLowerCase()];
 }
 
+/** The first MIME type listed for a file extension, such as "audio/mpeg" for "mp3". */
+export function mimeTypeForExtension(extension: string | undefined): string | undefined {
+	if (!extension) {
+		return undefined;
+	}
+	const wanted = extension.toLowerCase();
+	return Object.keys(EXTENSIONS).find((mimeType) => EXTENSIONS[mimeType] === wanted);
+}
+
 function fileNameFromUrl(url: string): string | undefined {
 	const path = url.split(/[?#]/)[0];
 	const last = path.substring(path.lastIndexOf('/') + 1);
@@ -511,4 +571,173 @@ export async function resolveMediaReference(
 		mimeType: contentType || reference.mimeType,
 		fileName: fileNameFromUrl(reference.url),
 	};
+}
+
+const IMAGE_EXTENSION_MIME_TYPES: Record<string, string> = {
+	png: 'image/png',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	webp: 'image/webp',
+	gif: 'image/gif',
+	bmp: 'image/bmp',
+	tif: 'image/tiff',
+	tiff: 'image/tiff',
+	avif: 'image/avif',
+};
+
+/**
+ * Reads an image from a binary field of the input item as a base64 data URI.
+ */
+export async function imageDataUri(
+	this: IExecuteFunctions,
+	itemIndex: number,
+	binaryPropertyName: string,
+): Promise<string> {
+	const binaryData = this.helpers.assertBinaryData(itemIndex, binaryPropertyName);
+	const declared = String(binaryData.mimeType ?? '')
+		.split(';')[0]
+		.trim()
+		.toLowerCase();
+	const extension = String(binaryData.fileExtension ?? '').toLowerCase();
+	const mimeType = declared.startsWith('image/') ? declared : IMAGE_EXTENSION_MIME_TYPES[extension];
+	if (!mimeType) {
+		throw new NodeOperationError(this.getNode(), 'The file is not an image', {
+			itemIndex,
+			description: `The field "${binaryPropertyName}" holds a file of type "${declared || 'unknown'}". Use an image such as a PNG, JPEG or WebP file.`,
+		});
+	}
+	const buffer = await this.helpers.getBinaryDataBuffer(itemIndex, binaryPropertyName);
+	return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
+/** Applies the Return All and Limit parameters of a Get Many operation to a list. */
+export function limitEntries(
+	this: IExecuteFunctions,
+	entries: IDataObject[],
+	itemIndex: number,
+): IDataObject[] {
+	const returnAll = this.getNodeParameter('returnAll', itemIndex, false) as boolean;
+	if (returnAll) {
+		return entries;
+	}
+	const limit = this.getNodeParameter('limit', itemIndex, 50) as number;
+	return entries.slice(0, limit);
+}
+
+/** The query of a template list request, from the Filters of a Get Many Templates operation. */
+export function templateListQuery(filters: IDataObject): IDataObject {
+	const qs: IDataObject = {};
+	if (typeof filters.category === 'string' && filters.category.trim() !== '') {
+		qs.category = filters.category.trim();
+	}
+	if (typeof filters.model === 'string' && filters.model !== '') {
+		qs.model = filters.model;
+	}
+	if (filters.featured === true) {
+		qs.featured = true;
+	}
+	return qs;
+}
+
+export interface FileNaming {
+	/** The file name without its extension, such as "audio". */
+	baseName: string;
+	/** The MIME type to use when the download does not name one. */
+	mimeType: string;
+	/** The extension to use when neither the file name nor the MIME type gives one. */
+	extension: string;
+}
+
+/**
+ * Downloads every file of a finished job. Returns one item per file, each with the job as JSON
+ * and the file in the binary field. A result without files gives no items.
+ */
+export async function jobFileItems(
+	this: IExecuteFunctions,
+	job: IDataObject,
+	itemIndex: number,
+	field: string,
+	naming: FileNaming,
+): Promise<INodeExecutionData[]> {
+	const references = extractMediaReferences(isDataObject(job.result) ? job.result : job);
+	const items: INodeExecutionData[] = [];
+	for (let index = 0; index < references.length; index++) {
+		const file = await resolveMediaReference.call(this, references[index], itemIndex);
+		const namedExtension = /\.([a-z0-9]{1,5})$/i.exec(file.fileName ?? '')?.[1];
+		const specific =
+			file.mimeType && file.mimeType !== 'application/octet-stream' ? file.mimeType : undefined;
+		const mimeType =
+			specific ?? mimeTypeForExtension(namedExtension) ?? file.mimeType ?? naming.mimeType;
+		const suffix = references.length > 1 ? `-${index + 1}` : '';
+		const extension = fileExtension(file, mimeType, naming.extension);
+		const binary = await this.helpers.prepareBinaryData(
+			file.data,
+			`${naming.baseName}${suffix}.${extension}`,
+			mimeType,
+		);
+		// Each item gets its own copy of the job, so a later node can change one without the others.
+		items.push({ json: { ...job }, binary: { [field]: binary }, pairedItem: { item: itemIndex } });
+	}
+	return items;
+}
+
+export interface StartedJobSettings {
+	/** Whether to wait for the job instead of returning it right away. */
+	wait: boolean;
+	/** How long to wait for the job, in seconds. */
+	timeoutSeconds: number;
+	/** How often to ask for the job status, in seconds. */
+	pollSeconds: number;
+	/** Whether to download the files of the finished job. */
+	download: boolean;
+	/** The binary field for the downloaded files. */
+	field: string;
+	naming: FileNaming;
+	/** The display name of the download toggle, named when the result holds no file. */
+	downloadToggle: string;
+}
+
+/**
+ * Shapes the output of an operation that starts a job: the job as the API returned it, the
+ * finished job, or one item per downloaded file with the finished job as JSON.
+ */
+export async function startedJobItems(
+	this: IExecuteFunctions,
+	started: IDataObject,
+	itemIndex: number,
+	settings: StartedJobSettings,
+): Promise<INodeExecutionData[]> {
+	if (!settings.wait) {
+		return [{ json: started, pairedItem: { item: itemIndex } }];
+	}
+
+	let job: IDataObject;
+	if (typeof started.job_id === 'string' && started.job_id !== '') {
+		job = await waitForJob.call(
+			this,
+			started.job_id,
+			settings.timeoutSeconds,
+			itemIndex,
+			settings.pollSeconds,
+		);
+	} else if (extractMediaReferences(started).length > 0) {
+		job = started;
+	} else {
+		throw new NodeOperationError(this.getNode(), 'The response did not include a job ID', {
+			itemIndex,
+			description: 'Try again, or turn off Wait for Completion to see the full response',
+		});
+	}
+
+	if (!settings.download) {
+		return [{ json: job, pairedItem: { item: itemIndex } }];
+	}
+	const items = await jobFileItems.call(this, job, itemIndex, settings.field, settings.naming);
+	if (items.length === 0) {
+		throw new NodeOperationError(this.getNode(), 'The finished job did not include a file', {
+			itemIndex,
+			description: `Turn off ${settings.downloadToggle} to return the job result as JSON`,
+		});
+	}
+	return items;
 }
